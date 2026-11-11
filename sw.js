@@ -1,6 +1,6 @@
 // アプリのファイルを端末に保存し、通信がなくても開けるようにする。
 // 開くときは保存済みのものをすぐ表示し、裏で新しい版を取りに行く（次に開いたときに反映）。
-const CACHE = 'card-navi-v3';
+const CACHE = 'card-navi-v4';
 const FILES = [
   './',
   './index.html',

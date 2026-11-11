@@ -7,7 +7,9 @@
 <meta name="description" content="手持ちのカードとお店を選ぶだけで、いちばん還元率が高い支払い方がわかります。">
 <meta name="theme-color" content="#040814">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- black-translucent（ステータスバーの裏まで描く）は、ホーム画面から開くと画面の高さが
+     ステータスバーの分だけ短くなり、下が空く。黒い帯のステータスバーにして、ページはその下から始める -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="カードナビ">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -17,10 +19,14 @@
    紺がメインの暗い一色のデザインなので、明るいテーマは用意しない */
 :root {
   color-scheme: dark;
-  padding-top: env(safe-area-inset-top, 0px);       /* ノッチやホームバーの分をあける */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  --gut-l: max(18px, env(safe-area-inset-left, 0px));
-  --gut-r: max(18px, env(safe-area-inset-right, 0px));
+  /* 画面の端で、ノッチ・ホームバー・角丸に隠れる幅。確認のときはここを数値で上書きして、iPhoneの形を再現する */
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-bottom: env(safe-area-inset-bottom, 0px);
+  --sa-left: env(safe-area-inset-left, 0px);
+  --sa-right: env(safe-area-inset-right, 0px);
+  padding-top: var(--sa-top);   /* 下はあけない。一覧はホームバーの裏まで続け、最後の行だけ持ち上げる */
+  --gut-l: max(18px, var(--sa-left));
+  --gut-r: max(18px, var(--sa-right));
   --bg: #040814;
   --text: #eef2ff;
   --sub: rgba(205, 216, 250, .64);
@@ -66,7 +72,7 @@ a { color: var(--link); }
 .app { max-width: 480px; margin: 0 auto; height: 100%; position: relative; }
 .view {
   position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  padding-block: 18px 120px; padding-left: var(--gut-l); padding-right: var(--gut-r);
+  padding-block: 18px calc(110px + var(--sa-bottom)); padding-left: var(--gut-l); padding-right: var(--gut-r);
   display: none;
 }
 .view.on { display: block; }
@@ -140,7 +146,7 @@ a { color: var(--link); }
 
 /* 下のタブバー */
 .tabs {
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 16px);
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: max(14px, calc(var(--sa-bottom) - 4px));
   display: grid; grid-template-columns: 1fr 1fr; width: min(300px, calc(100% - 60px)); height: 64px; padding: 5px; border-radius: 99px; z-index: 5;
   background: linear-gradient(135deg, rgba(60,84,160,.5), rgba(18,30,72,.55));
 }
@@ -163,10 +169,10 @@ a { color: var(--link); }
 }
 body.open .scrim { opacity: 1; pointer-events: auto; }
 body.open .sheet { transform: translate(-50%, 0); }
-.sheet .bar { flex: none; display: flex; align-items: center; gap: 10px; padding-block: 14px 10px; padding-left: max(22px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet .bar { flex: none; display: flex; align-items: center; gap: 10px; padding-block: 14px 10px; padding-left: max(22px, var(--sa-left)); padding-right: max(16px, var(--sa-right)); }
 .sheet .bar h2 { flex: 1; margin: 0; font-size: 20px; font-weight: 800; min-width: 0; }
 .sheet .bar .round { width: 36px; height: 36px; font-size: 18px; background: rgba(140,170,255,.16); }
-.sheet .body { overflow-y: auto; padding-block: 4px calc(env(safe-area-inset-bottom, 0px) + 26px); padding-left: var(--gut-l); padding-right: var(--gut-r); }
+.sheet .body { overflow-y: auto; padding-block: 4px calc(var(--sa-bottom) + 26px); padding-left: var(--gut-l); padding-right: var(--gut-r); }
 
 /* お店ごとの結果 */
 .hero { border-radius: var(--r); padding: 16px; margin-bottom: 14px; background: linear-gradient(135deg, rgba(242,198,109,.2), rgba(140,170,255,.07)); border: 1px solid rgba(242,198,109,.5); }
@@ -875,6 +881,33 @@ wallet.addEventListener('keydown', e => {   // キーボードでは Alt＋上�
   save(); renderWallet();
   document.querySelector(`.stack [data-card="${CSS.escape(el.dataset.card)}"]`)?.focus();
 });
+
+// ---- 画面の大きさの確認用：アドレスの末尾に #debug を付けて開くと、iPhone上の実際の数値と、表示域の外枠（赤）を出す ----
+function showDebug() {
+  if ($('dbg')) return;
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+  document.body.appendChild(probe);
+  const inset = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].map(k => parseFloat(getComputedStyle(probe)[k])).join(' / ');
+  probe.remove();
+  const tabs = $('tabs').getBoundingClientRect();
+  const lines = [
+    `画面 ${screen.width}×${screen.height}`,
+    `表示域 ${innerWidth}×${innerHeight}（html ${document.documentElement.clientHeight}）`,
+    `visualViewport ${window.visualViewport ? Math.round(visualViewport.height) : '-'}`,
+    `ホーム画面から ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'はい' : 'いいえ'}`,
+    `端の余白 上/右/下/左 ${inset}`,
+    `タブの下端 ${Math.round(tabs.bottom)}`,
+  ];
+  const box = document.createElement('div');
+  box.id = 'dbg';
+  box.style.cssText = 'position:fixed;inset:0;z-index:99;border:3px solid #ff3b30;pointer-events:none';
+  box.innerHTML = `<pre style="pointer-events:auto;margin:60px 12px 0;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.85);color:#fff;font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap">${esc(lines.join('\n'))}\n（タップで閉じる）</pre>`;
+  box.querySelector('pre').addEventListener('click', () => box.remove());
+  document.body.appendChild(box);
+}
+if (location.hash === '#debug') showDebug();
+window.addEventListener('hashchange', () => { if (location.hash === '#debug') showDebug(); });
 
 renderWallet(); renderShops();
 connect();
