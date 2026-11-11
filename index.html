@@ -882,7 +882,8 @@ wallet.addEventListener('keydown', e => {   // キーボードでは Alt＋上�
   document.querySelector(`.stack [data-card="${CSS.escape(el.dataset.card)}"]`)?.focus();
 });
 
-// ---- 画面の大きさの確認用：アドレスの末尾に #debug を付けて開くと、iPhone上の実際の数値と、表示域の外枠（赤）を出す ----
+// ---- 画面の大きさの確認用：iPhone上の実際の数値と、表示域の外枠（赤）を出す ----
+// アドレスの末尾に #debug を付けて開くか、ホーム画面から開いたときは見出し「カード」を2秒以内に5回タップする
 function showDebug() {
   if ($('dbg')) return;
   const probe = document.createElement('div');
@@ -908,6 +909,12 @@ function showDebug() {
 }
 if (location.hash === '#debug') showDebug();
 window.addEventListener('hashchange', () => { if (location.hash === '#debug') showDebug(); });
+let debugTaps = [];
+document.querySelector('#v-wallet h1').addEventListener('click', () => {
+  const now = Date.now();
+  debugTaps = debugTaps.filter(t => now - t < 2000).concat(now);
+  if (debugTaps.length >= 5) { debugTaps = []; showDebug(); }
+});
 
 renderWallet(); renderShops();
 connect();
