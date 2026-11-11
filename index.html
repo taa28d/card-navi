@@ -62,11 +62,27 @@ a { color: var(--link); }
 .bg i:nth-child(2) { width: 44vmax; height: 44vmax; right: -20vmax; top: 26vh; background: #27308f; opacity: .28; animation-delay: -9s; }
 .bg i:nth-child(3) { width: 48vmax; height: 48vmax; left: -8vmax; bottom: -30vmax; background: #0d4f86; opacity: .28; animation-delay: -15s; }
 @keyframes drift { to { transform: translate(5vmax, 4vmax) scale(1.1); } }
-/* ホーム画面から開くと、上のステータスバーはiOSが塗る黒い帯になり、アプリの背景は描けない。
-   背景の上端を帯の色（実機のスクショで #03030d 前後）から紺へ少しずつ変えて、つなぎ目を見せない */
+/* ホーム画面から開くと、上のステータスバーは端末が塗る帯になり、アプリの背景は描けない。
+   背景の上端を帯の色から紺へ少しずつ変えて、つなぎ目を見せない。
+   帯の色：iOS は黒い帯（実機のスクショで #03030d 前後）。Android の Chrome は theme_color（#040814）で塗る */
+html.home-app { --bar-rgb: 3, 4, 13; }
+html.bars-themed { --bar-rgb: 4, 8, 20; }
 html.home-app .bg::after {
   content: ""; position: absolute; inset: 0 0 auto; height: 190px; pointer-events: none;
-  background: linear-gradient(180deg, #03040d 0%, rgba(3,4,13,.94) 14%, rgba(3,4,13,.76) 34%, rgba(3,4,13,.46) 56%, rgba(3,4,13,.18) 80%, rgba(3,4,13,0) 100%);
+  background: linear-gradient(180deg, rgb(var(--bar-rgb)) 0%, rgba(var(--bar-rgb), .94) 14%, rgba(var(--bar-rgb), .76) 34%, rgba(var(--bar-rgb), .46) 56%, rgba(var(--bar-rgb), .18) 80%, rgba(var(--bar-rgb), 0) 100%);
+}
+/* Android のホーム画面アプリは、下のナビゲーションバーもアプリの外になり、Chrome が theme_color で塗る
+   （2026年11月時点。Chrome はまだ、ホーム画面アプリにバーの裏まで描かせない）。
+   一覧がバーの手前でぷつっと切れて見えないよう、画面の下端をバーと同じ色へ少しずつ変える。
+   Chrome が裏まで描くようになれば、下の余白が 0 でなくなり、この帯は自動で消える（JSで判定） */
+.navfade { display: none; }
+html.bars-themed .navfade {
+  display: block; position: fixed; inset: auto 0 0; height: 92px; z-index: 4; pointer-events: none;
+  background: linear-gradient(0deg, rgb(var(--bar-rgb)) 0%, rgba(var(--bar-rgb), .9) 16%, rgba(var(--bar-rgb), .66) 38%, rgba(var(--bar-rgb), .34) 64%, rgba(var(--bar-rgb), .1) 86%, rgba(var(--bar-rgb), 0) 100%);
+}
+html.bars-themed .sheet::after {
+  content: ""; position: absolute; inset: auto 0 0; height: 28px; pointer-events: none;
+  background: linear-gradient(0deg, rgb(var(--bar-rgb)), rgba(var(--bar-rgb), 0));
 }
 @media (prefers-reduced-motion: reduce) { .bg i { animation: none; } * { transition: none !important; } }
 
@@ -304,6 +320,7 @@ body.open .sheet { transform: translate(-50%, 0); }
   </button>
 </nav>
 
+<div class="navfade" aria-hidden="true"></div>
 <div id="saProbe" aria-hidden="true"></div>
 <div class="scrim" id="scrim"></div>
 <section class="sheet glass" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -947,6 +964,10 @@ function measureGap() {
   const gap = Math.round(screenH - innerHeight);
   const homeApp = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
   document.documentElement.classList.toggle('home-app', homeApp);
+  // Android などのホーム画面アプリで、上下のバーをブラウザが塗っている（ページが裏まで届かない）とき
+  const bottom = parseFloat(getComputedStyle($('saProbe')).paddingBottom) || 0;
+  document.documentElement.classList.toggle('bars-themed',
+    homeApp && navigator.standalone !== true && bottom === 0 && matchMedia('(pointer: coarse)').matches);
   vgap = homeApp && navigator.standalone === true && top > 0 && gap >= 20 && gap <= 100 ? gap : 0;
   document.documentElement.style.setProperty('--vgap', vgap + 'px');
   $('notice').hidden = !vgap || noticeClosed;
@@ -1088,6 +1109,7 @@ function showDebug() {
     `端の余白 上/右/下/左 ${inset}`,
     `ステータスバー ${parseFloat(inset) > 0 ? '透過（裏まで描く）' : '黒い帯'}`,
     `下の描けない帯 ${vgap ? vgap + '（追加し直すと直る）' : 'なし'}`,
+    `下のバー ${document.documentElement.classList.contains('bars-themed') ? 'ブラウザが塗る（色をなじませる）' : 'アプリが描く'}`,
     `タブの下端 ${Math.round(tabs.bottom)}`,
   ];
   const box = document.createElement('div');
