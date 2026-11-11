@@ -62,6 +62,12 @@ a { color: var(--link); }
 .bg i:nth-child(2) { width: 44vmax; height: 44vmax; right: -20vmax; top: 26vh; background: #27308f; opacity: .28; animation-delay: -9s; }
 .bg i:nth-child(3) { width: 48vmax; height: 48vmax; left: -8vmax; bottom: -30vmax; background: #0d4f86; opacity: .28; animation-delay: -15s; }
 @keyframes drift { to { transform: translate(5vmax, 4vmax) scale(1.1); } }
+/* ホーム画面から開くと、上のステータスバーはiOSが塗る黒い帯になり、アプリの背景は描けない。
+   背景の上端を帯の色（実機のスクショで #03030d 前後）から紺へ少しずつ変えて、つなぎ目を見せない */
+html.home-app .bg::after {
+  content: ""; position: absolute; inset: 0 0 auto; height: 190px; pointer-events: none;
+  background: linear-gradient(180deg, #03040d 0%, rgba(3,4,13,.94) 14%, rgba(3,4,13,.76) 34%, rgba(3,4,13,.46) 56%, rgba(3,4,13,.18) 80%, rgba(3,4,13,0) 100%);
+}
 @media (prefers-reduced-motion: reduce) { .bg i { animation: none; } * { transition: none !important; } }
 
 /* Liquid Glass の共通面 */
@@ -939,7 +945,9 @@ function measureGap() {
   const portrait = innerHeight >= innerWidth;
   const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
   const gap = Math.round(screenH - innerHeight);
-  vgap = navigator.standalone === true && top > 0 && gap >= 20 && gap <= 100 ? gap : 0;
+  const homeApp = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  document.documentElement.classList.toggle('home-app', homeApp);
+  vgap = homeApp && navigator.standalone === true && top > 0 && gap >= 20 && gap <= 100 ? gap : 0;
   document.documentElement.style.setProperty('--vgap', vgap + 'px');
   $('notice').hidden = !vgap || noticeClosed;
 }
