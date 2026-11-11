@@ -25,6 +25,10 @@
   --sa-left: env(safe-area-inset-left, 0px);
   --sa-right: env(safe-area-inset-right, 0px);
   padding-top: var(--sa-top);   /* 下はあけない。一覧はホームバーの裏まで続け、最後の行だけ持ち上げる */
+  /* --vgap：iOS 26 で、ステータスバーを透過にして追加したホーム画面アプリだけ、画面の下に描けない帯ができる。
+     その高さ（JSで測る）。帯がホームバーを覆うので、そのぶんホームバーの余白（--home）を減らす */
+  --vgap: 0px;
+  --home: max(0px, calc(var(--sa-bottom) - var(--vgap)));
   --gut-l: max(18px, var(--sa-left));
   --gut-r: max(18px, var(--sa-right));
   --bg: #040814;
@@ -46,7 +50,7 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
-button, input { font: inherit; color: inherit; }
+button, input, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 button { border: 0; background: none; padding: 0; cursor: pointer; }
 a { color: var(--link); }
@@ -72,7 +76,7 @@ a { color: var(--link); }
 .app { max-width: 480px; margin: 0 auto; height: 100%; position: relative; }
 .view {
   position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  padding-block: 18px calc(110px + var(--sa-bottom)); padding-left: var(--gut-l); padding-right: var(--gut-r);
+  padding-block: 18px calc(110px + var(--home)); padding-left: var(--gut-l); padding-right: var(--gut-r);
   display: none;
 }
 .view.on { display: block; }
@@ -85,6 +89,27 @@ a { color: var(--link); }
 .round, .pill, .row { transition: transform .15s ease; }
 :focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .sync { margin: -8px 4px 14px; font-size: 12px; line-height: 1.6; color: var(--sub); }
+
+/* 以前に追加したホーム画面アプリへのお知らせと、データの引き継ぎ */
+.notice { border-radius: 22px; padding: 14px 16px 16px; margin: -6px 0 16px; border-color: rgba(242,198,109,.45); }
+.notice b { display: block; font-size: 15px; margin-bottom: 4px; }
+.notice p { margin: 0 0 12px; color: var(--sub); font-size: 13px; line-height: 1.65; }
+.notice .acts { margin-top: 0; }
+.wfoot { text-align: center; margin: 14px 0 0; }
+.link { color: var(--link); font-size: 14px; font-weight: 700; padding: 10px 12px; }
+.steps { margin: 0 0 18px; padding-left: 1.4em; font-size: 14px; line-height: 1.75; }
+.steps li + li { margin-top: 6px; }
+.steps b { color: var(--accent); }
+.lead { margin: 0 4px 14px; font-size: 14px; line-height: 1.7; color: var(--sub); }
+.code { display: block; width: 100%; height: 92px; border-radius: 16px; padding: 12px 14px; resize: none; outline: 0;
+  font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all;
+  background: rgba(140,170,255,.1); border: 1px solid var(--edge); }
+.code:focus { border-color: var(--link); }
+.code + .pill, .code + .acts { margin-top: 12px; }
+.err.ok { color: #9fe0b4; }
+.pill:disabled { opacity: .4; }
+/* 端の余白を測るための見えない箱 */
+#saProbe { position: fixed; top: 0; left: 0; width: 0; visibility: hidden; pointer-events: none; padding: var(--sa-top) 0 var(--sa-bottom); }
 
 /* カード。券面の絵は faces.js のSVG、その上にカード名と基本の還元率を重ねる */
 .card {
@@ -146,7 +171,7 @@ a { color: var(--link); }
 
 /* 下のタブバー */
 .tabs {
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: max(14px, calc(var(--sa-bottom) - 4px));
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: max(14px, calc(var(--home) - 4px));
   display: grid; grid-template-columns: 1fr 1fr; width: min(300px, calc(100% - 60px)); height: 64px; padding: 5px; border-radius: 99px; z-index: 5;
   background: linear-gradient(135deg, rgba(60,84,160,.5), rgba(18,30,72,.55));
 }
@@ -172,7 +197,7 @@ body.open .sheet { transform: translate(-50%, 0); }
 .sheet .bar { flex: none; display: flex; align-items: center; gap: 10px; padding-block: 14px 10px; padding-left: max(22px, var(--sa-left)); padding-right: max(16px, var(--sa-right)); }
 .sheet .bar h2 { flex: 1; margin: 0; font-size: 20px; font-weight: 800; min-width: 0; }
 .sheet .bar .round { width: 36px; height: 36px; font-size: 18px; background: rgba(140,170,255,.16); }
-.sheet .body { overflow-y: auto; padding-block: 4px calc(var(--sa-bottom) + 26px); padding-left: var(--gut-l); padding-right: var(--gut-r); }
+.sheet .body { overflow-y: auto; padding-block: 4px calc(var(--home) + 26px); padding-left: var(--gut-l); padding-right: var(--gut-r); }
 
 /* お店ごとの結果 */
 .hero { border-radius: var(--r); padding: 16px; margin-bottom: 14px; background: linear-gradient(135deg, rgba(242,198,109,.2), rgba(140,170,255,.07)); border: 1px solid rgba(242,198,109,.5); }
@@ -241,7 +266,13 @@ body.open .sheet { transform: translate(-50%, 0); }
       <button class="round glass" id="addBtn" aria-label="カードを追加">＋</button>
     </div>
     <p class="sync" id="syncNote" role="status" hidden></p>
+    <div class="notice glass" id="notice" role="note" hidden>
+      <b>画面の下まで表示するには</b>
+      <p>iOS 26 では、以前にホーム画面に追加したこのアプリは、下の部分が表示されません。ホーム画面に追加し直すと直ります。登録したカードは引き継げます。</p>
+      <div class="acts"><button class="pill sm solid" data-reinstall>やり方を見る</button><button class="pill sm glass" data-notice-close>あとで</button></div>
+    </div>
     <div id="wallet"></div>
+    <p class="wfoot"><button class="link" data-transfer>データの引き継ぎ</button></p>
   </main>
 
   <main class="view" id="v-shops">
@@ -267,6 +298,7 @@ body.open .sheet { transform: translate(-50%, 0); }
   </button>
 </nav>
 
+<div id="saProbe" aria-hidden="true"></div>
 <div class="scrim" id="scrim"></div>
 <section class="sheet glass" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="bar"><h2 id="sheetTitle"></h2><span id="sheetAct"></span><button class="round" id="closeBtn" aria-label="閉じる">✕</button></div>
@@ -491,6 +523,9 @@ function renderWallet() {
     : `<div class="empty glass"><b>まずは手持ちのカードを登録</b>
        <p>持っているクレジットカードやスマホ決済を選ぶだけ。<br>カード番号や名前の入力はいりません。</p>
        <button class="pill solid" data-add>＋ カードを選ぶ</button></div>`;
+  // 空のときは、一覧の中に「前のデータを引き継ぐ」を出すので、下のリンクは隠す
+  $('wallet').querySelector('.empty')?.insertAdjacentHTML('beforeend', '<p class="wfoot"><button class="link" data-transfer>前のアプリのデータを引き継ぐ</button></p>');
+  document.querySelector('#v-wallet > .wfoot').hidden = !cards.length;
 }
 
 // ---- カードの並べ替え：長押ししてから上下に動かす（Walletと同じ操作）。マウスはそのままドラッグ ----
@@ -801,6 +836,12 @@ document.addEventListener('click', e => {
   if (d.tab) return setTab(d.tab);
   if (t.id === 'addBtn' || 'add' in d || 'picker' in d) return showPicker();
   if (t.id === 'closeBtn' || 'close' in d) return closeSheet();
+  if ('transfer' in d) return showTransfer();
+  if ('reinstall' in d) return showReinstall();
+  if ('noticeClose' in d) { noticeClosed = true; return measureGap(); }
+  if ('copyCode' in d) return copyCode();
+  if ('pasteCode' in d) return pasteCode();
+  if ('loadCode' in d) return loadCode(t);
   if (d.fav) {
     toggleFav(d.fav);
     return 'inSheet' in d ? showStore(d.fav) : renderShops();
@@ -855,6 +896,11 @@ document.addEventListener('change', e => {
 document.addEventListener('input', e => {
   if (e.target.id === 'q') renderShops();
   if (e.target.id === 'pickQ') { pickQuery = e.target.value; $('pickList').innerHTML = pickerRows(); }
+  if (e.target.id === 'codeIn') {   // 貼り直したら、置き換えの確認をやり直す
+    const b = document.querySelector('[data-load-code]');
+    b.dataset.loadCode = ''; b.textContent = '読み込む';
+    $('loadMsg').textContent = '';
+  }
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.body.classList.contains('open')) closeSheet();
@@ -882,6 +928,140 @@ wallet.addEventListener('keydown', e => {   // キーボードでは Alt＋上�
   document.querySelector(`.stack [data-card="${CSS.escape(el.dataset.card)}"]`)?.focus();
 });
 
+// ---- iOS 26 の不具合：以前の設定で追加したホーム画面アプリでは、下に描けない帯ができる ----
+// ステータスバーを透過（black-translucent）にして追加したアプリは、ステータスバーの裏から描くのに、
+// 表示域がステータスバーの分だけ短い（440×956の画面で innerHeight 894）。下の帯はアプリの外で、何を置いても映らない。
+// 今は黒い帯のステータスバーにしてあるが、この設定はホーム画面に追加したときに決まるので、追加し直すまで直らない。
+// 帯があるときは、帯がホームバーを覆うぶんタブを下げ（--vgap）、追加し直しを案内する。
+let vgap = 0, noticeClosed = false;
+function measureGap() {
+  const top = parseFloat(getComputedStyle($('saProbe')).paddingTop) || 0;
+  const portrait = innerHeight >= innerWidth;
+  const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+  const gap = Math.round(screenH - innerHeight);
+  vgap = navigator.standalone === true && top > 0 && gap >= 20 && gap <= 100 ? gap : 0;
+  document.documentElement.style.setProperty('--vgap', vgap + 'px');
+  $('notice').hidden = !vgap || noticeClosed;
+}
+measureGap();
+setTimeout(measureGap, 600);   // 開いた直後は、iOSが高さを後から変えることがある
+addEventListener('resize', measureGap);
+addEventListener('pageshow', measureGap);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) measureGap(); });
+
+function showReinstall() {
+  const addr = location.host + location.pathname.replace(/index\.html$/, '');
+  openSheet('追加し直す手順', `<p class="lead">以前の設定のまま追加したホーム画面アプリは、iOS 26 では画面の下に何も表示できません。アプリの中からは直せないため、ホーム画面に追加し直してください。</p>
+    <ol class="steps">
+      <li>下の<b>「引き継ぎコードをコピー」</b>を押す。念のため、メモ帳にも貼り付けておくと安心です。</li>
+      <li>ホーム画面のカードナビのアイコンを長押しして、削除する。</li>
+      <li>Safariで <b>${esc(addr)}</b> を開き、共有メニューから「ホーム画面に追加」を選ぶ。</li>
+      <li>新しいアイコンから開き、カード一覧の<b>「前のアプリのデータを引き継ぐ」</b>で、コードを貼り付けて読み込む。</li>
+    </ol>${exportHTML()}`);
+}
+
+// ---- データの引き継ぎ ----
+// ホーム画面のアプリは、それぞれ別の保存場所を持つ。追加し直すと空になるので、登録内容を1つのコードにして移す。
+const CODE_HEAD = 'CARDNAVI1:';
+const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+function exportCode() {
+  const { owned, favs, custom, images, opts } = state;
+  const bytes = new TextEncoder().encode(JSON.stringify({ owned, favs, custom, images, opts }));
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return CODE_HEAD + btoa(bin);
+}
+// 貼り付けられた文字は信用しない。形を確かめ、知っているカード・お店・画像の形式だけを取り込む
+function parseCode(text) {
+  const s = String(text).replace(/\s+/g, '');
+  if (!s.startsWith(CODE_HEAD)) return null;
+  let data;
+  try {
+    const bin = atob(s.slice(CODE_HEAD.length));
+    data = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))));
+  } catch { return null; }
+  if (!data || typeof data !== 'object') return null;
+  const list = v => Array.isArray(v) ? v : [];
+  const dict = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  const custom = list(data.custom)
+    .filter(c => c && typeof c.id === 'string' && /^custom-\d+$/.test(c.id) && typeof c.name === 'string' && c.name.trim())
+    .map(c => ({ id: c.id, name: c.name.trim().slice(0, 24), base: Math.min(30, Math.max(0, Number(c.base) || 0)),
+      color: Number.isInteger(c.color) && CUSTOM_COLORS[c.color] ? c.color : 0 }));
+  const cardIds = new Set(CARDS.map(c => c.id).concat(custom.map(c => c.id)));
+  const storeIds = new Set(STORES.map(s => s.id));
+  const images = {}, opts = {};
+  for (const [id, src] of Object.entries(dict(data.images))) if (cardIds.has(id) && typeof src === 'string' && IMG_RE.test(src)) images[id] = src;
+  for (const [id, v] of Object.entries(dict(data.opts))) {
+    if (!cardIds.has(id)) continue;
+    const o = {};
+    for (const [k, on] of Object.entries(dict(v))) if (typeof on === 'boolean') o[k] = on;
+    opts[id] = o;
+  }
+  return {
+    owned: [...new Set(list(data.owned).filter(id => cardIds.has(id)))],
+    favs: [...new Set(list(data.favs).filter(id => storeIds.has(id)))],
+    custom, images, opts,
+  };
+}
+function exportHTML() {
+  if (!state.owned.length) return '<p class="lead">このアプリには、まだカードが登録されていません。</p>';
+  return `<textarea class="code" id="codeOut" readonly hidden aria-label="引き継ぎコード"></textarea>
+    <button class="pill solid" data-copy-code>引き継ぎコードをコピー</button>
+    <p class="err" id="codeMsg" role="status"></p>`;
+}
+function showTransfer() {
+  openSheet('データの引き継ぎ', `<div class="sec"><span>このアプリから移す</span></div>
+    <p class="lead">登録したカード・並び順・お気に入り・条件・券面の写真を、1つのコードにまとめてコピーします。カード番号などの情報は入っていません。</p>
+    ${exportHTML()}
+    <div class="sec"><span>コードを読み込む</span></div>
+    <p class="lead">前のアプリでコピーしたコードを貼り付けて、「読み込む」を押してください。</p>
+    <textarea class="code" id="codeIn" placeholder="ここに貼り付け（CARDNAVI1:で始まる文字）" aria-label="引き継ぎコードを貼り付け" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="acts">${navigator.clipboard?.readText ? '<button class="pill glass" data-paste-code>貼り付け</button>' : ''}<button class="pill solid" data-load-code>読み込む</button></div>
+    <p class="err" id="loadMsg" role="status"></p>`);
+}
+function copyCode() {
+  const code = exportCode(), msg = $('codeMsg');
+  const fallback = () => {   // 自動でコピーできないときは、コードを見せて自分で選んでもらう
+    const box = $('codeOut');
+    box.hidden = false; box.value = code; box.focus(); box.setSelectionRange(0, code.length);
+    msg.className = 'err';
+    msg.textContent = '自動でコピーできませんでした。上の欄を長押しして「すべてを選択」→「コピー」を選んでください。';
+  };
+  if (!navigator.clipboard?.writeText) return fallback();
+  navigator.clipboard.writeText(code).then(() => {
+    msg.className = 'err ok';
+    msg.textContent = `コピーしました（カード${ownedCards().length}枚）。念のため、メモ帳などにも貼り付けておくと安心です。`;
+  }, fallback);
+}
+async function pasteCode() {
+  try {
+    $('codeIn').value = await navigator.clipboard.readText();
+    $('codeIn').dispatchEvent(new Event('input', { bubbles: true }));
+  } catch {
+    $('loadMsg').className = 'err';
+    $('loadMsg').textContent = '貼り付けられませんでした。上の欄を長押しして「ペースト」を選んでください。';
+  }
+}
+function loadCode(btn) {
+  const msg = $('loadMsg'), data = parseCode($('codeIn').value);
+  msg.className = 'err';
+  if (!data) { msg.textContent = 'コードを読み取れませんでした。「CARDNAVI1:」から最後まで、全部を貼り付けてください。'; return; }
+  if (!data.owned.length) { msg.textContent = 'このコードには、登録したカードが入っていません。'; return; }
+  const now = ownedCards().length;
+  if (now && btn.dataset.loadCode !== 'sure') {   // 今の登録を消すので、もう一度押してもらう
+    btn.dataset.loadCode = 'sure'; btn.textContent = '置き換える';
+    msg.textContent = `いま登録している${now}枚は消えて、コードの${data.owned.length}枚に置き換わります。よければ「置き換える」を押してください。`;
+    return;
+  }
+  const oldImages = Object.keys(state.images);
+  Object.assign(state, data);
+  save();
+  oldImages.filter(id => !data.images[id]).forEach(dropImage);
+  Object.keys(data.images).forEach(pushImage);
+  closeSheet();
+  $('v-wallet').scrollTop = 0;
+}
+
 // ---- 画面の大きさの確認用：iPhone上の実際の数値と、表示域の外枠（赤）を出す ----
 // アドレスの末尾に #debug を付けて開くか、ホーム画面から開いたときは見出し「カード」を2秒以内に5回タップする
 function showDebug() {
@@ -898,6 +1078,8 @@ function showDebug() {
     `visualViewport ${window.visualViewport ? Math.round(visualViewport.height) : '-'}`,
     `ホーム画面から ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'はい' : 'いいえ'}`,
     `端の余白 上/右/下/左 ${inset}`,
+    `ステータスバー ${parseFloat(inset) > 0 ? '透過（裏まで描く）' : '黒い帯'}`,
+    `下の描けない帯 ${vgap ? vgap + '（追加し直すと直る）' : 'なし'}`,
     `タブの下端 ${Math.round(tabs.bottom)}`,
   ];
   const box = document.createElement('div');
