@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>カードナビ</title>
+<meta name="description" content="手持ちのカードとお店を選ぶだけで、いちばん還元率が高い支払い方がわかります。">
+<meta name="theme-color" content="#040814">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="カードナビ">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* GitHub Pages で公開する、ホーム画面に追加できるウェブアプリ。
+   1画面のアプリ：下のタブで「カード一覧」と「お店検索」を切り替え、詳しい内容は下から出るシートに出す。
+   紺がメインの暗い一色のデザインなので、明るいテーマは用意しない */
+:root {
+  color-scheme: dark;
+  padding-top: env(safe-area-inset-top, 0px);       /* ノッチやホームバーの分をあける */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --gut-l: max(18px, env(safe-area-inset-left, 0px));
+  --gut-r: max(18px, env(safe-area-inset-right, 0px));
+  --bg: #040814;
+  --text: #eef2ff;
+  --sub: rgba(205, 216, 250, .64);
+  --edge: rgba(160, 188, 255, .2);
+  --line: rgba(160, 188, 255, .13);
+  --accent: #f2c66d;   /* 紺に合わせた金色。いちばんおトクな数字や星に使う */
+  --link: #8fb4ff;
+  --r: 26px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", sans-serif;
+  font-size: 16px;
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+button { border: 0; background: none; padding: 0; cursor: pointer; }
+a { color: var(--link); }
+
+/* 背景：ほぼ黒に近い紺。ガラス越しに青がにじむよう、暗い光の玉を置く */
+.bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: radial-gradient(120% 80% at 50% 0%, #0a1634 0%, #050a1a 55%, #03060f 100%); }
+.bg i { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .34; animation: drift 26s ease-in-out infinite alternate; }
+.bg i:nth-child(1) { width: 56vmax; height: 56vmax; left: -22vmax; top: -24vmax; background: #1c46b0; }
+.bg i:nth-child(2) { width: 44vmax; height: 44vmax; right: -20vmax; top: 26vh; background: #27308f; opacity: .28; animation-delay: -9s; }
+.bg i:nth-child(3) { width: 48vmax; height: 48vmax; left: -8vmax; bottom: -30vmax; background: #0d4f86; opacity: .28; animation-delay: -15s; }
+@keyframes drift { to { transform: translate(5vmax, 4vmax) scale(1.1); } }
+@media (prefers-reduced-motion: reduce) { .bg i { animation: none; } * { transition: none !important; } }
+
+/* Liquid Glass の共通面 */
+.glass {
+  background: linear-gradient(135deg, rgba(140,170,255,.15), rgba(110,140,255,.04) 45%, rgba(140,170,255,.09));
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+  border: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 -1px 0 rgba(255,255,255,.04), 0 12px 36px rgba(0,0,0,.5);
+}
+
+.app { max-width: 480px; margin: 0 auto; height: 100%; position: relative; }
+.view {
+  position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding-block: 18px 120px; padding-left: var(--gut-l); padding-right: var(--gut-r);
+  display: none;
+}
+.view.on { display: block; }
+
+.head { display: flex; align-items: flex-end; justify-content: space-between; margin: 6px 4px 18px; }
+.head h1 { font-size: 34px; letter-spacing: -.02em; margin: 0; font-weight: 800; }
+.head p { margin: 4px 0 0; color: var(--sub); font-size: 13px; }
+.round { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; line-height: 1; flex: none; }
+.round:active, .pill:active, .row:active { transform: scale(.96); }
+.round, .pill, .row { transition: transform .15s ease; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.sync { margin: -8px 4px 14px; font-size: 12px; line-height: 1.6; color: var(--sub); }
+
+/* カード。券面の絵は faces.js のSVG、その上にカード名と基本の還元率を重ねる */
+.card {
+  position: relative; display: block; width: 100%; aspect-ratio: 1.586; border-radius: 18px; overflow: hidden; text-align: left;
+  color: var(--ink, #fff); background: #1a2647 center / cover;
+  box-shadow: 0 -8px 22px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.14);
+}
+.card .face, .sw .face { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.card::after { /* 表面の光沢 */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.16), transparent 30%); box-shadow: inset 0 1px 0 rgba(255,255,255,.45);
+}
+.card .nm { position: absolute; left: 18px; top: 14px; right: 86px; font-weight: 700; font-size: 15px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+.card.lt .nm { text-shadow: 0 1px 0 rgba(255,255,255,.6); }
+.card .rt { position: absolute; right: 14px; top: 11px; font-weight: 800; font-size: 13px; padding: 3px 9px; border-radius: 99px; color: #fff; background: rgba(6,12,30,.62); }
+.card.photo .nm, .card.photo .rt { display: none; }
+
+/* Wallet風の重なり。長押しして上下に動かすと並べ替えられる */
+.stack { padding-bottom: 10px; -webkit-user-select: none; user-select: none; }
+.stack .card { -webkit-touch-callout: none; }
+.stack .card + .card { margin-top: calc(-63.05% + 62px); }
+.stack.sorting .card { transition: transform .22s cubic-bezier(.2,.8,.2,1); }
+.stack .card.lift { transition: none; z-index: 30; box-shadow: 0 26px 54px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.3); }
+
+.empty { border-radius: var(--r); padding: 34px 22px; text-align: center; }
+.empty b { display: block; font-size: 18px; margin-bottom: 8px; }
+.empty p { color: var(--sub); font-size: 14px; line-height: 1.7; margin: 0 0 20px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 46px; padding: 0 22px; border-radius: 99px; font-weight: 700; font-size: 15px; }
+.pill.solid { background: #fff; color: #0a1433; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.pill.sm { height: 34px; padding: 0 14px; font-size: 13px; }
+.pill.danger { color: #ff9d9d; }
+
+/* お店検索 */
+.search { display: flex; align-items: center; gap: 10px; height: 50px; border-radius: 99px; padding: 0 18px; margin-bottom: 14px; }
+.search input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; font-size: 16px; }
+.search input::placeholder { color: var(--sub); }
+.search:focus-within { border-color: var(--link); }
+.chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 calc(-1 * var(--gut-r)) 18px calc(-1 * var(--gut-l)); padding: 2px var(--gut-r) 2px var(--gut-l); scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chipb { flex: none; height: 38px; padding: 0 15px; border-radius: 99px; font-size: 14px; font-weight: 600; background: rgba(140,170,255,.1); border: 1px solid var(--line); white-space: nowrap; }
+.chipb.on { background: #fff; color: #0a1433; border-color: #fff; }
+.sec { display: flex; align-items: center; justify-content: space-between; margin: 20px 6px 10px; font-size: 13px; font-weight: 700; color: var(--sub); }
+.sec button { color: var(--link); font-weight: 700; font-size: 14px; padding: 6px; margin: -6px; }
+.list { border-radius: var(--r); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 9px 14px; text-align: left; }
+.row + .row { border-top: 1px solid var(--line); }
+.ico { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; font-size: 20px; background: rgba(140,170,255,.14); flex: none; }
+.row .t { flex: 1; min-width: 0; }
+.row .t b { display: block; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .t span { font-size: 12px; color: var(--sub); }
+.row .best { font-weight: 800; font-size: 16px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.star { width: 40px; height: 40px; font-size: 21px; color: rgba(190,205,255,.35); flex: none; }
+.star.on { color: var(--accent); }
+.mv { width: 38px; height: 38px; border-radius: 12px; background: rgba(140,170,255,.14); font-size: 15px; flex: none; }
+.mv:disabled { opacity: .25; }
+.none { color: var(--sub); text-align: center; padding: 28px 10px; font-size: 14px; }
+.foot, .fn { color: var(--sub); font-size: 12px; line-height: 1.7; margin: 22px 6px 0; }
+.fn { margin-top: 8px; }
+
+/* 下のタブバー */
+.tabs {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 16px);
+  display: grid; grid-template-columns: 1fr 1fr; width: min(300px, calc(100% - 60px)); height: 64px; padding: 5px; border-radius: 99px; z-index: 5;
+  background: linear-gradient(135deg, rgba(60,84,160,.5), rgba(18,30,72,.55));
+}
+.tabs::before { /* 選択中のタブを示すガラスの粒 */
+  content: ""; position: absolute; top: 5px; bottom: 5px; left: 5px; width: calc(50% - 5px); border-radius: 99px;
+  background: rgba(170,195,255,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 2px 10px rgba(0,0,0,.3);
+  transition: transform .35s cubic-bezier(.3,1.4,.5,1);
+}
+.tabs[data-tab="shops"]::before { transform: translateX(100%); }
+.tabs button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 700; color: var(--sub); }
+.tabs button.on { color: #fff; }
+.tabs svg { width: 24px; height: 24px; }
+
+/* 下から出るシート */
+.scrim { position: fixed; inset: 0; background: rgba(1,3,10,.62); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 10; }
+.sheet {
+  position: fixed; left: 50%; bottom: 0; width: min(480px, 100%); max-height: 90%; z-index: 11; display: flex; flex-direction: column;
+  transform: translate(-50%, 105%); transition: transform .42s cubic-bezier(.2,.9,.25,1);
+  border-radius: 32px 32px 0 0; border-bottom: 0; background: linear-gradient(160deg, rgba(24,38,88,.86), rgba(7,12,32,.92));
+}
+body.open .scrim { opacity: 1; pointer-events: auto; }
+body.open .sheet { transform: translate(-50%, 0); }
+.sheet .bar { flex: none; display: flex; align-items: center; gap: 10px; padding-block: 14px 10px; padding-left: max(22px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet .bar h2 { flex: 1; margin: 0; font-size: 20px; font-weight: 800; min-width: 0; }
+.sheet .bar .round { width: 36px; height: 36px; font-size: 18px; background: rgba(140,170,255,.16); }
+.sheet .body { overflow-y: auto; padding-block: 4px calc(env(safe-area-inset-bottom, 0px) + 26px); padding-left: var(--gut-l); padding-right: var(--gut-r); }
+
+/* お店ごとの結果 */
+.hero { border-radius: var(--r); padding: 16px; margin-bottom: 14px; background: linear-gradient(135deg, rgba(242,198,109,.2), rgba(140,170,255,.07)); border: 1px solid rgba(242,198,109,.5); }
+.hero .lab { font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: .06em; }
+.hero .main { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.hero .card { width: 112px; flex: none; border-radius: 9px; box-shadow: 0 6px 16px rgba(0,0,0,.5); }
+.hero .card .nm, .hero .card .rt { display: none; }
+.hero .nm2 { flex: 1; min-width: 0; font-weight: 700; font-size: 16px; line-height: 1.35; }
+.hero .nm2 small { display: block; font-weight: 600; font-size: 12px; color: var(--sub); margin-top: 3px; }
+.hero .big { font-size: 38px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hero .big span { font-size: 18px; }
+.hero .big.txt { font-size: 22px; letter-spacing: 0; }
+.note { font-size: 12px; color: var(--sub); margin-top: 6px; line-height: 1.6; }
+.rk { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.rk + .rk { border-top: 1px solid var(--line); }
+.rk .no { width: 22px; text-align: center; font-weight: 800; color: var(--sub); flex: none; }
+.sw { position: relative; display: block; width: 46px; aspect-ratio: 1.586; border-radius: 5px; overflow: hidden; background: #1a2647 center / cover; box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); flex: none; }
+.rk .t { flex: 1; min-width: 0; }
+.rk .t b { display: block; font-size: 15px; font-weight: 600; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.m { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: rgba(160,188,255,.17); white-space: nowrap; }
+.m.c { background: rgba(242,198,109,.17); color: var(--accent); }
+.pc { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rk.off { opacity: .55; }
+
+/* カードの画面：お店ごとに1行ずつ並べる */
+.st { padding: 11px 14px; }
+.st + .st { border-top: 1px solid var(--line); }
+.ln { display: flex; align-items: center; gap: 10px; }
+.ln + .ln { margin-top: 8px; }
+.ln .l { flex: 1; min-width: 0; }
+.ln b { display: block; font-size: 15px; font-weight: 600; }
+.ln .pc { font-size: 16px; }
+.tg { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; text-align: left; }
+.tg + .tg { border-top: 1px solid var(--line); }
+.tg span { flex: 1; font-size: 14px; line-height: 1.5; }
+.tg i { width: 46px; height: 28px; border-radius: 99px; background: rgba(160,188,255,.22); position: relative; flex: none; transition: background .2s; }
+.tg i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; }
+.tg[aria-checked="true"] i { background: var(--accent); }
+.tg[aria-checked="true"] i::after { transform: translateX(18px); }
+
+.pick .tick { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(190,205,255,.4); display: grid; place-items: center; font-size: 15px; flex: none; color: transparent; }
+.pick.on .tick { background: var(--accent); border-color: var(--accent); color: #2a1c00; font-weight: 900; }
+.form label { display: block; font-size: 13px; font-weight: 700; color: var(--sub); margin: 16px 4px 8px; }
+.form input[type=text], .form input[type=number], .inp { width: 100%; height: 50px; border-radius: 16px; padding: 0 16px; font-size: 16px; background: rgba(140,170,255,.1); border: 1px solid var(--edge); outline: 0; }
+.form input:focus, .inp:focus { border-color: var(--link); }
+.cols { display: flex; gap: 10px; flex-wrap: wrap; }
+.cols button { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--c1), var(--c2)); border: 3px solid transparent; }
+.cols button.on { border-color: #fff; }
+.acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.err { color: #ffb0b0; font-size: 13px; margin: 10px 4px 0; min-height: 1em; }
+</style>
+</head>
+<body>
+<!-- ICチップの色。どのカードの絵からも参照する -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <linearGradient id="chipG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7e4a8"/><stop offset="1" stop-color="#b98a2c"/></linearGradient>
+  <linearGradient id="chipS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset="1" stop-color="#a4a9b1"/></linearGradient>
+</defs></svg>
+<div class="bg"><i></i><i></i><i></i></div>
+
+<div class="app">
+  <main class="view on" id="v-wallet">
+    <div class="head">
+      <div><h1>カード</h1><p id="walletSub"></p></div>
+      <button class="round glass" id="addBtn" aria-label="カードを追加">＋</button>
+    </div>
+    <p class="sync" id="syncNote" role="status" hidden></p>
+    <div id="wallet"></div>
+  </main>
+
+  <main class="view" id="v-shops">
+    <div class="head"><div><h1>お店</h1><p id="shopSub"></p></div></div>
+    <label class="search glass">
+      <span aria-hidden="true">🔍</span>
+      <input id="q" type="search" placeholder="お店の名前で検索" autocomplete="off" enterkeyhint="search" aria-label="お店の名前で検索">
+    </label>
+    <div class="chips" id="cats"></div>
+    <div id="shops"></div>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+
+<nav class="tabs glass" id="tabs" data-tab="wallet">
+  <button data-tab="wallet" class="on">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M7 15h3"/></svg>
+    カード一覧
+  </button>
+  <button data-tab="shops">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+    お店検索
+  </button>
+</nav>
+
+<div class="scrim" id="scrim"></div>
+<section class="sheet glass" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="bar"><h2 id="sheetTitle"></h2><span id="sheetAct"></span><button class="round" id="closeBtn" aria-label="閉じる">✕</button></div>
+  <div class="body" id="sheetBody"></div>
+</section>
+
+<script src="data.js"></script>
+<script src="faces.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pct = n => String(Math.round(n * 100) / 100);
+const jpDate = iso => { const [y, m, d] = iso.split('-').map(Number); return `${y}年${m}月${d}日`; };
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+let clock = () => new Date();   // 日付や時間帯で変わる還元率の判定に使う「いま」
+
+document.documentElement.lang = 'ja';
+
+// ---- 保存データ（カード番号などは扱わない） ----
+// claude.ai で開いたときは、その人だけが読める保存先（data/users/<id>/）に置き、iPhoneとPCで同じ内容になる。
+//   prefs … 登録カード・並び順・お気に入り・条件 / img-<カードID> … 券面に使う画像（1枚1件）
+// ブラウザの localStorage は、すぐ表示するための控え。保存先を使えないとき（ログインしていない、
+// ローカルで確認しているとき）は、ここだけに保存する。
+const KEY = 'card-navi-v1';
+const state = Object.assign({ owned: [], favs: [], custom: [], images: {}, opts: {} }, loadLocal());
+function loadLocal() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } }
+function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
+function save() { saveLocal(); queuePrefs(); }   // 画像以外を変えたときに呼ぶ
+
+let remote = null;        // { prefs, col }：保存先につながったら入る
+let sync = 'local';       // local（保存先なし）/ loading / ok / stale（応答なし）/ off（使えない）/ error（書き込み失敗）
+const SYNC_TEXT = {
+  off: '登録したカードは、このブラウザの中だけに保存されます（claude.aiの保存先を使えないため）。',
+  stale: '保存先に接続できていません。表示が古いかもしれません。',
+  error: '保存先に書き込めませんでした。次に操作したときに、もう一度保存します。',
+};
+function renderSync() { const el = $('syncNote'); el.textContent = SYNC_TEXT[sync] || ''; el.hidden = !SYNC_TEXT[sync]; }
+
+async function tryTwice(fn) {   // 一時的な不調（unavailable）のときだけ、少し待って1回やり直す
+  try { return await fn(); } catch (e) {
+    if (e?.code !== 'unavailable') throw e;
+    await new Promise(r => setTimeout(r, 400 + Math.random() * 800));
+    return fn();
+  }
+}
+function syncFailed(e) {
+  // リンクで開いた別の人など、保存先に書けない人（invalid_argument）は、このブラウザだけに保存する
+  if (e?.code === 'invalid_argument' || e?.code === 'revoked') { remote = null; dirty = false; sync = 'off'; renderSync(); return; }
+  sync = 'error';
+  if (e?.code === 'quota_exceeded') SYNC_TEXT.error = '保存先の容量がいっぱいです。カードの画像を外すと空きができます。';
+  renderSync();
+}
+
+// 続けて操作したときは、止まってから0.5秒後に1回だけ書く。書き込み中の次の書き込みは、終わってから
+let writeTimer = 0, writing = null, dirty = false;
+const writeBusy = () => !!(writeTimer || writing || dirty);
+function queuePrefs() {
+  if (!remote) return;
+  dirty = true;
+  clearTimeout(writeTimer);
+  writeTimer = setTimeout(flushPrefs, 500);
+}
+function flushPrefs() {
+  clearTimeout(writeTimer); writeTimer = 0;
+  if (!remote || writing || !dirty) return;
+  dirty = false;
+  const body = JSON.parse(JSON.stringify({ owned: state.owned, favs: state.favs, custom: state.custom, opts: state.opts }));
+  writing = tryTwice(() => remote.prefs.set(body))
+    .then(() => { if (sync === 'error') { sync = 'ok'; renderSync(); } })
+    .catch(syncFailed)
+    .finally(() => { writing = null; if (dirty) flushPrefs(); });
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushPrefs(); });
+
+// 画像は1枚ずつ別の件にする（1件256KBまで）
+async function pushImage(id) {
+  if (!remote) return true;
+  try { await tryTwice(() => remote.col.doc('img-' + id).set({ src: state.images[id] })); return true; }
+  catch (e) { syncFailed(e); return sync === 'off'; }   // 書けない人なら、このブラウザに残して続ける
+}
+function dropImage(id) {
+  if (remote) tryTwice(() => remote.col.doc('img-' + id).delete()).catch(syncFailed);
+}
+
+// 保存先から届いた内容を画面に反映する。自分の書き込みが済む前は、登録内容を上書きしない
+function applyRemote(snap) {
+  let prefs = null;
+  const images = {};
+  for (const d of snap.docs) {
+    const v = d.data() || {};
+    if (d.id === 'prefs') prefs = v;
+    else if (d.id.startsWith('img-') && typeof v.src === 'string') images[d.id.slice(4)] = v.src;
+  }
+  let changed = false;
+  if (prefs && !writeBusy()) {
+    const next = JSON.stringify({ owned: prefs.owned || [], favs: prefs.favs || [], custom: prefs.custom || [], opts: prefs.opts || {} });
+    if (next !== JSON.stringify({ owned: state.owned, favs: state.favs, custom: state.custom, opts: state.opts })) {
+      Object.assign(state, JSON.parse(next));
+      changed = true;
+    }
+  }
+  if (!snap.metadata.fromCache && JSON.stringify(images) !== JSON.stringify(state.images)) {
+    state.images = images;
+    changed = true;
+  }
+  return changed;
+}
+async function connect() {
+  if (!window.claude?.use) return;   // ローカルで開いたときは localStorage だけ
+  sync = 'loading';
+  renderWallet();
+  const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+  const uid = user ? await user.id() : null;
+  if (!db || !uid) { sync = 'off'; renderSync(); renderWallet(); return; }
+  const col = db.collection('data/users/' + uid);
+  remote = { col, prefs: col.doc('prefs') };
+  const timer = setTimeout(() => { if (sync === 'loading') { sync = 'stale'; renderSync(); renderWallet(); } }, 10000);
+  col.onSnapshot(snap => {
+    const first = sync === 'loading' || sync === 'stale';
+    if (!snap.metadata.fromCache) { clearTimeout(timer); if (sync !== 'error') sync = 'ok'; }
+    const changed = applyRemote(snap);
+    if (changed) saveLocal();
+    renderSync();
+    if ((changed || first) && !drag) { renderWallet(); renderShops(); }
+  }, () => { clearTimeout(timer); remote = null; sync = 'off'; renderSync(); renderWallet(); });
+}
+
+const CUSTOM_COLORS = [['#5b6cff', '#27308f'], ['#ff6b8b', '#a3264a'], ['#22b8a0', '#0d5f55'], ['#f2a93b', '#a4610c'], ['#8d5bff', '#44249a'], ['#3a3d4a', '#0f1016']];
+const allCards = () => CARDS.concat(state.custom.map(c => ({
+  id: c.id, kind: 'card', custom: true, name: c.name, issuer: '自分で追加したカード',
+  colors: CUSTOM_COLORS[c.color] || CUSTOM_COLORS[0], base: c.base, rules: [],
+})));
+const cardById = id => allCards().find(c => c.id === id);
+const ownedCards = () => state.owned.map(cardById).filter(Boolean);
+const storeById = id => STORES.find(s => s.id === id);
+const catById = id => CATEGORIES.find(c => c.id === id);
+
+// ---- 還元率の計算 ----
+const optOf = (card, id) => (card.opts || []).find(o => o.id === id);
+function optOn(card, id) {   // その人の条件。カードの画面で切り替えていなければ、データの初期値を使う
+  const saved = state.opts[card.id];
+  if (saved && id in saved) return saved[id];
+  return !!optOf(card, id)?.on;
+}
+const baseOf = (card, day) => card.baseNext && day >= card.baseNext.from ? card.baseNext.rate : card.base;
+// カードの右上に出す「ふだんの還元率」。その人の条件でどのお店でも上がる分（PayPayステップなど）を含める
+function usualRate(card) {
+  const d = clock(), day = isoDay(d);
+  const anywhere = (card.rules || []).filter(r => r.where && !r.need && ruleLive(card, r, d, day)).map(r => r.rate);
+  return pct(Math.max(baseOf(card, day), ...anywhere)) + '%' + (card.baseOff ? 'OFF' : '');
+}
+function ruleLive(card, r, d, day) {   // 期間・その人の条件・日付・時間帯をすべて満たしているか
+  if (r.until && day > r.until) return false;
+  if (r.if && ![].concat(r.if).every(id => optOn(card, id))) return false;
+  if (r.days && !r.days.includes(d.getDate())) return false;
+  if (r.hours && !(d.getHours() >= r.hours[0] && d.getHours() < r.hours[1])) return false;
+  return true;
+}
+const ruleHits = (r, store) => r.where === 'all' || (r.where === 'offline' ? store.cat !== 'online' : (r.stores || []).includes(store.id));
+function canUse(card, store) {
+  if (card.only && !card.only.includes(store.id)) return false;
+  if (card.kind === 'pay' && store.cat === 'online') return !!card.online?.includes(store.id);
+  return true;
+}
+// その支払い手段が使えると、公式の加盟店一覧で確かめられているか
+const accepted = (need, store) => !need || store.cat === 'online' || ACCEPT[need].includes(store.id);
+const whenText = r => [r.days ? `毎月${r.days.join('日・')}日` : '', r.hours ? `${r.hours[0]}時〜${r.hours[1]}時` : ''].filter(Boolean).join(' ');
+const rateText = o => o.label || pct(o.rate) + '%' + (o.off ? 'OFF' : '');
+
+// そのお店でいま使える払い方を、還元率の高い順に並べる
+function options(card, store) {
+  if (!canUse(card, store)) return [];
+  const d = clock(), day = isoDay(d);
+  const out = [{ rate: baseOf(card, day), method: card.baseMethod || 'card', note: '', off: card.baseOff, need: card.need, sure: accepted(card.need, store) }];
+  for (const r of card.rules || []) {
+    if (!ruleHits(r, store) || !ruleLive(card, r, d, day)) continue;
+    const need = r.need || card.need;
+    out.push({ rate: r.rate, method: r.method, note: r.note || '', label: r.label, off: r.off, when: whenText(r), need, sure: accepted(need, store) });
+  }
+  return out.sort((a, b) => b.rate - a.rate);
+}
+// 登録したカードを順位づけする。best は「使えると確認できている中でいちばん高い払い方」、
+// maybe は「そのお店で使えれば、もっと高くなる払い方」
+function ranking(store) {
+  const rows = ownedCards().map(card => {
+    const opts = options(card, store);
+    const best = opts.find(o => o.sure) || null;
+    const seen = new Set();
+    const maybe = opts.filter(o => !o.sure && (!best || o.rate > best.rate) && !seen.has(o.method) && seen.add(o.method));
+    return { card, opts, best, maybe };
+  });
+  const score = r => r.best ? r.best.rate : -1;
+  return rows.sort((a, b) => score(b) - score(a) || (b.maybe[0]?.rate ?? -1) - (a.maybe[0]?.rate ?? -1));
+}
+
+// ---- カードの見た目 ----
+const faceOf = card => card.custom ? FACES.custom(card.colors[0], card.colors[1]) : FACES[card.id] || FACES.custom('#39508f', '#16234d');
+let faceSeq = 0;
+function faceSVG(f) {   // 同じ絵を何枚も描くので、グラデーションのIDに通し番号を付けて重ならないようにする
+  const n = ++faceSeq;
+  const art = f.art.replace(/(id="|url\(#)([\w-]+)/g, (m, a, id) => id.startsWith('chip') ? m : `${a}${id}_${n}`);
+  return `<svg class="face" viewBox="0 0 320 202" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">${art}</svg>`;
+}
+function cardHTML(card, tag = 'div', attrs = '') {
+  const f = faceOf(card), img = state.images[card.id];
+  return `<${tag} class="card ${f.d ? 'lt' : ''} ${img ? 'photo' : ''}" style="--ink:${f.ink};${img ? `background-image:url(${img})` : ''}" ${attrs} aria-label="${esc(card.name)}">
+    ${img ? '' : faceSVG(f)}<span class="nm">${esc(card.name)}</span><span class="rt">${usualRate(card)}</span></${tag}>`;
+}
+function swatch(card, w = 46) {
+  const img = state.images[card.id];
+  return `<span class="sw" style="width:${w}px;${img ? `background-image:url(${img})` : ''}">${img ? '' : faceSVG(faceOf(card))}</span>`;
+}
+
+// ---- カード一覧 ----
+function renderWallet() {
+  const cards = ownedCards();
+  $('walletSub').textContent = cards.length > 1 ? `${cards.length}枚を登録中・長押しで並べ替え` : cards.length ? '1枚を登録中' : 'カード番号の入力はいりません';
+  $('wallet').innerHTML = cards.length
+    ? `<div class="stack">${cards.map(c => cardHTML(c, 'button', `data-card="${esc(c.id)}"`)).join('')}</div>`
+    : sync === 'loading' ? '<div class="none">登録したカードを読み込んでいます…</div>'
+    : `<div class="empty glass"><b>まずは手持ちのカードを登録</b>
+       <p>持っているクレジットカードやスマホ決済を選ぶだけ。<br>カード番号や名前の入力はいりません。</p>
+       <button class="pill solid" data-add>＋ カードを選ぶ</button></div>`;
+}
+
+// ---- カードの並べ替え：長押ししてから上下に動かす（Walletと同じ操作）。マウスはそのままドラッグ ----
+let drag = null, clickBlockedUntil = 0;
+const pointY = e => (e.touches ? e.touches[0] : e).clientY;
+function dragStart(e) {
+  if (e.type === 'mousedown' && e.button !== 0) return;
+  const el = e.target.closest('.stack .card');
+  if (!el) return;
+  const cards = [...el.parentNode.children];
+  if (cards.length < 2) return;
+  dragStop();
+  const y = pointY(e), from = cards.indexOf(el);
+  drag = { el, cards, from, to: from, y0: y, y, s0: $('v-wallet').scrollTop, on: false, mouse: e.type === 'mousedown',
+    step: cards[1].offsetTop - cards[0].offsetTop };
+  if (!drag.mouse) drag.timer = setTimeout(dragOn, 280);
+}
+function dragOn() {
+  if (!drag || drag.on) return;
+  drag.on = true;
+  drag.el.classList.add('lift');
+  drag.el.parentNode.classList.add('sorting');
+  dragApply();
+  drag.raf = requestAnimationFrame(dragFrame);
+}
+function dragMove(e) {
+  if (!drag) return;
+  drag.y = pointY(e);
+  if (!drag.on) {
+    const moved = Math.abs(drag.y - drag.y0);
+    if (drag.mouse) { if (moved > 5) dragOn(); }
+    else if (moved > 8) dragStop();   // 長押しの前に指が動いたら、ふつうのスクロールとして扱う
+    return;
+  }
+  if (e.cancelable) e.preventDefault();
+  dragApply();
+}
+function dragApply() {   // 持ち上げたカードを指に合わせて動かし、通り過ぎたカードを1枚分ずらす
+  const dy = drag.y - drag.y0 + $('v-wallet').scrollTop - drag.s0;
+  drag.to = Math.max(0, Math.min(drag.cards.length - 1, Math.round(drag.from + dy / drag.step)));
+  drag.cards.forEach((c, i) => {
+    if (c === drag.el) { c.style.transform = `translateY(${dy}px) scale(1.03)`; return; }
+    const shift = i > drag.from && i <= drag.to ? -drag.step : i < drag.from && i >= drag.to ? drag.step : 0;
+    c.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+}
+function dragFrame() {   // 指が画面の上下の端に近いあいだ、一覧を自動で送る
+  if (!drag || !drag.on) return;
+  const view = $('v-wallet'), before = view.scrollTop;
+  if (drag.y < 110) view.scrollTop -= 9; else if (drag.y > innerHeight - 150) view.scrollTop += 9;
+  if (view.scrollTop !== before) dragApply();
+  drag.raf = requestAnimationFrame(dragFrame);
+}
+function dragEnd() {
+  if (!drag) return;
+  const d = drag;
+  dragStop();
+  if (!d.on) return;
+  clickBlockedUntil = Date.now() + 400;   // 並べ替えの直後は、カードを開く操作として扱わない
+  if (d.to !== d.from) {
+    const order = d.cards.map(c => c.dataset.card);
+    order.splice(d.to, 0, order.splice(d.from, 1)[0]);
+    state.owned = order.concat(state.owned.filter(id => !order.includes(id)));
+    save();
+  }
+  renderWallet();
+}
+function dragStop() {
+  if (!drag) return;
+  clearTimeout(drag.timer);
+  cancelAnimationFrame(drag.raf);
+  drag.cards.forEach(c => { c.style.transform = ''; });
+  drag.el.classList.remove('lift');
+  drag.el.parentNode.classList.remove('sorting');
+  drag = null;
+}
+
+// ---- お店検索 ----
+let cat = 'all', editFavs = false;
+const kana = s => s.toLowerCase().replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/[\s\-‐－・]/g, '');
+function storeRow(s, i, n) {
+  const fav = state.favs.includes(s.id);
+  const top = ranking(s).find(r => r.best)?.best;
+  const c = catById(s.cat);
+  if (editFavs && n) {
+    return `<div class="row"><span class="ico">${c.icon}</span><span class="t"><b>${esc(s.name)}</b></span>
+      <button class="mv" data-mv="-1" data-id="${s.id}" ${i === 0 ? 'disabled' : ''} aria-label="上へ">▲</button>
+      <button class="mv" data-mv="1" data-id="${s.id}" ${i === n - 1 ? 'disabled' : ''} aria-label="下へ">▼</button>
+      <button class="star on" data-fav="${s.id}" aria-label="お気に入りから外す">★</button></div>`;
+  }
+  return `<div class="row" data-store="${s.id}" role="button" tabindex="0"><span class="ico">${c.icon}</span>
+    <span class="t"><b>${esc(s.name)}</b><span>${c.name}</span></span>
+    ${top ? `<span class="best">${rateText(top)}</span>` : ''}
+    <button class="star ${fav ? 'on' : ''}" data-fav="${s.id}" aria-label="${fav ? 'お気に入りから外す' : 'お気に入りに追加'}" aria-pressed="${fav}">${fav ? '★' : '☆'}</button></div>`;
+}
+function renderShops() {
+  $('shopSub').textContent = `還元率データ：${jpDate(DATA_UPDATED)}更新`;
+  $('cats').innerHTML = [{ id: 'all', name: 'すべて', icon: '' }].concat(CATEGORIES)
+    .map(c => `<button class="chipb ${cat === c.id ? 'on' : ''}" data-cat="${c.id}">${c.icon} ${c.name}</button>`).join('');
+  const q = kana($('q').value.trim());
+  const favs = state.favs.map(storeById).filter(Boolean);
+  if (!favs.length) editFavs = false;
+  let html = '';
+  if (!q && cat === 'all' && favs.length) {
+    html += `<div class="sec"><span>★ お気に入り</span><button data-edit>${editFavs ? '完了' : '並べ替え'}</button></div>
+      <div class="list glass">${favs.map((s, i) => storeRow(s, i, favs.length)).join('')}</div>`;
+  }
+  const found = STORES.filter(s => (cat === 'all' || s.cat === cat) && (!q || kana(s.name + s.k).includes(q)));
+  if (!editFavs || q || cat !== 'all') {
+    html += `<div class="sec"><span>${q ? '検索結果' : cat === 'all' ? 'すべてのお店' : catById(cat).name}</span></div>`;
+    html += found.length ? `<div class="list glass">${found.map(s => storeRow(s)).join('')}</div>`
+      : `<div class="none">「${esc($('q').value.trim())}」は見つかりませんでした</div>`;
+  }
+  $('shops').innerHTML = html;
+  $('foot').textContent = `還元率は${jpDate(DATA_UPDATED)}に各社の公式サイトで確認した内容です。改定やキャンペーン、利用条件によって変わるため、正確な内容は各社の公式サイトでご確認ください。`;
+}
+
+// ---- シート ----
+let lastFocus = null;
+function openSheet(title, body, act = '', keepScroll = false) {
+  if (!document.body.classList.contains('open')) lastFocus = document.activeElement;
+  const top = keepScroll ? $('sheetBody').scrollTop : 0;
+  $('sheetTitle').textContent = title;
+  $('sheetAct').innerHTML = act;
+  $('sheetBody').innerHTML = body;
+  $('sheetBody').scrollTop = top;
+  document.body.classList.add('open');
+}
+function closeSheet() {
+  document.body.classList.remove('open');
+  lastFocus?.focus?.();
+  renderWallet(); renderShops();
+}
+const tag = (text, cond) => `<span class="m ${cond ? 'c' : ''}">${esc(text)}</span>`;
+
+// お店を選んだときの結果
+function showStore(id) {
+  const s = storeById(id);
+  const rows = ranking(s);
+  if (!rows.length) {
+    return openSheet(s.name, `<div class="empty"><b>カードがまだありません</b><p>手持ちのカードを登録すると、ここに還元率の高い順で並びます。</p>
+      <button class="pill solid" data-add>＋ カードを選ぶ</button></div>`);
+  }
+  const ranked = rows.filter(r => r.best), unsure = rows.filter(r => !r.best && r.opts.length), unusable = rows.filter(r => !r.opts.length);
+  let html = '';
+  if (ranked.length) {
+    const { card, best: o } = ranked[0];
+    html += `<div class="hero"><div class="lab">ここで使う1枚</div><div class="main">${cardHTML(card)}
+      <div class="nm2">${esc(card.name)}<small>${METHODS[o.method]}${o.when ? `（${o.when}）` : ''}</small></div>
+      <div class="big ${o.label ? 'txt' : ''}">${o.label ? esc(o.label) : `${pct(o.rate)}<span>%${o.off ? 'OFF' : ''}</span>`}</div></div>${o.note ? `<div class="note">${esc(o.note)}</div>` : ''}</div>`;
+    html += `<div class="list glass">${ranked.map(({ card, opts, best, maybe }, i) => {
+      const more = maybe.map(o => `${ACCEPT_NAMES[o.need]}が使えるお店なら${rateText(o)}`);
+      const seen = new Set([best.method]);
+      for (const o of opts) if (o.sure && !seen.has(o.method)) { seen.add(o.method); more.push(`${METHODS[o.method]}は${rateText(o)}`); }
+      const note = [best.note, ...more].filter(Boolean).join(' ／ ');
+      return `<div class="rk"><span class="no">${i + 1}</span>${swatch(card)}<span class="t"><b>${esc(card.name)}</b>
+        <div class="tags">${tag(METHODS[best.method])}${best.when ? tag(best.when, true) : ''}</div>${note ? `<div class="note">${esc(note)}</div>` : ''}</span>
+        <span class="pc">${rateText(best)}</span></div>`;
+    }).join('')}</div>`;
+  }
+  if (unsure.length) {
+    html += `<div class="sec"><span>使えるかはお店で確認</span></div><div class="list glass">${unsure.map(({ card, opts }) => {
+      const o = opts[0];
+      return `<div class="rk"><span class="no">?</span>${swatch(card)}<span class="t"><b>${esc(card.name)}</b>
+        <div class="tags">${tag(METHODS[o.method])}${o.when ? tag(o.when, true) : ''}</div>
+        <div class="note">${ACCEPT_NAMES[o.need]}の公式の加盟店一覧で、このお店を確認できませんでした${o.note ? ' ／ ' + esc(o.note) : ''}</div></span>
+        <span class="pc">${rateText(o)}</span></div>`;
+    }).join('')}</div>`;
+  }
+  if (unusable.length) {
+    html += `<div class="sec"><span>このお店では対象外</span></div><div class="list glass">${unusable.map(({ card }) =>
+      `<div class="rk off"><span class="no">–</span>${swatch(card)}<span class="t"><b>${esc(card.name)}</b></span></div>`).join('')}</div>`;
+  }
+  html += `<p class="foot">還元率データの更新日：${jpDate(DATA_UPDATED)}。日付や時間帯で変わる特典は、いまの時刻で計算しています。</p>`;
+  const fav = state.favs.includes(id);
+  openSheet(s.name, html, `<button class="star ${fav ? 'on' : ''}" data-fav="${id}" data-in-sheet aria-label="お気に入り" aria-pressed="${fav}">${fav ? '★' : '☆'}</button>`);
+}
+
+// カードを選ぶ画面
+let pickQuery = '';
+function pickerRows() {
+  const q = pickQuery.trim().toLowerCase();
+  const row = c => `<button class="row pick ${state.owned.includes(c.id) ? 'on' : ''}" data-pick="${esc(c.id)}" aria-pressed="${state.owned.includes(c.id)}">
+    ${swatch(c, 52)}<span class="t"><b>${esc(c.name)}</b><span>${usualRate(c)}・${esc(c.issuer)}</span></span><span class="tick">✓</span></button>`;
+  const cards = allCards().filter(c => !q || (c.name + c.issuer).toLowerCase().includes(q));
+  const group = (title, list) => list.length ? `<div class="sec"><span>${title}</span></div><div class="list glass">${list.map(row).join('')}</div>` : '';
+  return group('クレジットカード', cards.filter(c => c.kind === 'card' && !c.custom)) +
+    group('スマホ決済', cards.filter(c => c.kind === 'pay')) +
+    group('自分で追加したカード', cards.filter(c => c.custom)) ||
+    `<div class="none">「${esc(pickQuery.trim())}」は見つかりませんでした</div>`;
+}
+function showPicker() {
+  pickQuery = '';
+  openSheet('カードを選ぶ',
+    `<input class="inp" id="pickQ" type="search" placeholder="カードの名前で探す" autocomplete="off" aria-label="カードの名前で探す">
+     <div id="pickList">${pickerRows()}</div>
+     <div class="acts"><button class="pill glass" data-custom>＋ 一覧にないカードを追加</button></div>`,
+    `<button class="pill sm solid" data-close>完了</button>`);
+}
+
+function showCustomForm() {
+  openSheet('カードを追加', `<div class="form">
+    <label for="cName">カードの名前</label><input id="cName" type="text" maxlength="24" placeholder="例：○○カード">
+    <label for="cRate">基本の還元率（%）</label><input id="cRate" type="number" inputmode="decimal" min="0" max="30" step="0.1" placeholder="例：1.0">
+    <label>カードの色</label><div class="cols" id="cCols">${CUSTOM_COLORS.map((c, i) =>
+      `<button class="${i ? '' : 'on'}" data-col="${i}" style="--c1:${c[0]};--c2:${c[1]}" aria-label="色${i + 1}"></button>`).join('')}</div>
+    <p class="err" id="cErr" role="alert"></p>
+    <div class="acts"><button class="pill solid" data-custom-save>追加する</button><button class="pill glass" data-picker>戻る</button></div></div>`);
+}
+
+// カードを開いた画面。還元率は、お店のカテゴリごとに1店ずつ行を分けて並べる
+function showCard(id, keepScroll) {
+  const c = cardById(id);
+  if (!c) return;
+  const day = isoDay(clock());
+  const live = (c.rules || []).filter(r => !(r.until && day > r.until));
+  const tags = r => tag(METHODS[r.method]) + [].concat(r.if || []).map(k => tag(optOf(c, k).short, true)).join('') +
+    (whenText(r) ? tag(whenText(r), true) : '') + (r.until ? tag(`${jpDate(r.until)}まで`, true) : '');
+  const line = (name, r, note) => `<div class="ln"><div class="l">${name ? `<b>${esc(name)}</b>` : ''}<div class="tags">${tags(r)}</div>${note ? `<div class="note">${esc(note)}</div>` : ''}</div><span class="pc">${rateText(r)}</span></div>`;
+
+  let html = cardHTML(c);
+  if (c.opts) {
+    html += `<div class="sec"><span>あなたの条件</span></div><div class="list glass">${c.opts.map(o =>
+      `<button class="tg" role="switch" aria-checked="${optOn(c, o.id)}" data-opt="${esc(c.id)}:${o.id}"><span>${esc(o.label)}</span><i></i></button>`).join('')}</div>
+      <p class="fn">オンにした条件で、お店ごとの順位を計算します。</p>`;
+  }
+
+  const anywhere = live.filter(r => r.where).sort((a, b) => b.rate - a.rate);
+  const baseRow = { rate: baseOf(c, day), method: c.baseMethod || 'card', off: c.baseOff };
+  html += `<div class="sec"><span>どのお店でも</span></div><div class="list glass"><div class="st">${line('基本の還元率', baseRow,
+    c.baseNext && day < c.baseNext.from ? `${jpDate(c.baseNext.from)}の利用分から${pct(c.baseNext.rate)}%` : '')}</div>${anywhere.map(r =>
+    `<div class="st">${line(r.need ? `${ACCEPT_NAMES[r.need]}が使えるお店` : '条件を満たしたとき', r, r.note)}</div>`).join('')}</div>`;
+
+  for (const cat of CATEGORIES) {
+    const stores = STORES.filter(s => s.cat === cat.id)
+      .map(s => ({ s, rs: live.filter(r => r.stores?.includes(s.id)).sort((a, b) => b.rate - a.rate) })).filter(x => x.rs.length);
+    if (!stores.length) continue;
+    // 2店以上に共通する注意書きは、まとめてカテゴリの下に出す
+    const uses = {};
+    for (const { rs } of stores) for (const n of new Set(rs.map(r => r.note).filter(Boolean))) uses[n] = (uses[n] || 0) + 1;
+    const shared = Object.keys(uses).filter(n => uses[n] >= 2);
+    html += `<div class="sec"><span>${cat.icon} ${cat.name}</span></div><div class="list glass">${stores.map(({ s, rs }) =>
+      `<div class="st">${rs.map((r, i) => line(i ? '' : s.name, r, shared.includes(r.note) ? '' : r.note)).join('')}</div>`).join('')}</div>` +
+      (shared.length ? `<p class="fn">${shared.map(n => '※ ' + esc(n)).join('<br>')}</p>` : '');
+  }
+
+  if (c.checked) {
+    html += `<div class="sec"><span>このデータについて</span></div>
+      <p class="fn">確認日：${jpDate(c.checked)}${c.src ? `　<a href="${esc(c.src)}" target="_blank" rel="noopener">公式サイトで見る</a>` : ''}${c.memo ? `<br>${esc(c.memo)}` : ''}</p>`;
+  }
+  html += `<div class="sec"><span>カードの見た目</span></div>
+    <div class="acts" style="margin-top:0">
+      <label class="pill sm glass" style="cursor:pointer">画像を選ぶ<input type="file" accept="image/*" data-img="${esc(id)}" hidden></label>
+      ${state.images[id] ? `<button class="pill sm glass" data-img-clear="${esc(id)}">画像を外す</button>` : ''}
+    </div>
+    <p class="fn">券面はイラストです。手持ちのカードの写真を表面として使うこともできます（画像はこの端末の中だけに保存。カード番号が写らないものをおすすめします）。</p>
+    <p class="err" id="imgErr" role="alert"></p>
+    <div class="acts"><button class="pill glass danger" data-remove="${esc(id)}">${c.custom ? 'このカードを削除' : 'カード一覧から外す'}</button></div>`;
+  openSheet(c.name, html, '', keepScroll);
+}
+
+// 選んだ画像をカードの比率に切り抜いて小さくし、保存できる大きさ（1件180KB以下）にする
+function setImage(id, file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = async () => {
+    let data = '';
+    for (const [W, q] of [[640, .82], [640, .65], [480, .7], [400, .6]]) {
+      const H = Math.round(W / 1.586), cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      const scale = Math.max(W / img.width, H / img.height);
+      const w = img.width * scale, h = img.height * scale;
+      cv.getContext('2d').drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      data = cv.toDataURL('image/jpeg', q);
+      if (data.length < 180000) break;
+    }
+    URL.revokeObjectURL(url);
+    state.images[id] = data;
+    saveLocal();
+    showCard(id, true);
+    if (!(await pushImage(id))) {
+      delete state.images[id]; saveLocal(); showCard(id, true);
+      $('imgErr').textContent = 'この画像は保存できませんでした。別の画像をお試しください。';
+    }
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); $('imgErr').textContent = 'この画像は読み込めませんでした。別の画像をお試しください。'; };
+  img.src = url;
+}
+
+function toggleFav(id) {
+  const i = state.favs.indexOf(id);
+  if (i < 0) state.favs.push(id); else state.favs.splice(i, 1);
+  save();
+}
+function setTab(tab) {
+  $('tabs').dataset.tab = tab;
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  $('v-wallet').classList.toggle('on', tab === 'wallet');
+  $('v-shops').classList.toggle('on', tab === 'shops');
+  if (tab === 'shops') renderShops();   // 時間帯で変わる還元率を、開いたときの時刻に合わせる
+}
+
+// ---- 操作 ----
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, [data-store], label');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.tab) return setTab(d.tab);
+  if (t.id === 'addBtn' || 'add' in d || 'picker' in d) return showPicker();
+  if (t.id === 'closeBtn' || 'close' in d) return closeSheet();
+  if (d.fav) {
+    toggleFav(d.fav);
+    return 'inSheet' in d ? showStore(d.fav) : renderShops();
+  }
+  if (d.mv) {
+    const i = state.favs.indexOf(d.id), j = i + Number(d.mv);
+    if (j >= 0 && j < state.favs.length) { [state.favs[i], state.favs[j]] = [state.favs[j], state.favs[i]]; save(); renderShops(); }
+    return;
+  }
+  if ('edit' in d) { editFavs = !editFavs; return renderShops(); }
+  if (d.cat) { cat = d.cat; editFavs = false; return renderShops(); }
+  if (d.store) return showStore(d.store);
+  if (d.card) { if (Date.now() > clickBlockedUntil) showCard(d.card); return; }
+  if (d.opt) {
+    const [cardId, optId] = d.opt.split(':');
+    (state.opts[cardId] ||= {})[optId] = t.getAttribute('aria-checked') !== 'true';
+    save();
+    return showCard(cardId, true);
+  }
+  if (d.pick) {
+    const i = state.owned.indexOf(d.pick);
+    if (i < 0) state.owned.push(d.pick); else state.owned.splice(i, 1);
+    save();
+    const on = i < 0;
+    t.classList.toggle('on', on); t.setAttribute('aria-pressed', on);
+    return;
+  }
+  if ('custom' in d) return showCustomForm();
+  if (d.col) { document.querySelectorAll('#cCols button').forEach(b => b.classList.toggle('on', b === t)); return; }
+  if ('customSave' in d) {
+    const name = $('cName').value.trim(), rate = parseFloat($('cRate').value);
+    if (!name) { $('cErr').textContent = 'カードの名前を入力してください。'; return $('cName').focus(); }
+    if (!(rate >= 0 && rate <= 30)) { $('cErr').textContent = '還元率は0〜30の数字で入力してください。'; return $('cRate').focus(); }
+    const id = 'custom-' + Date.now();
+    state.custom.push({ id, name, base: rate, color: Number(document.querySelector('#cCols .on').dataset.col) });
+    state.owned.push(id); save();
+    return showPicker();
+  }
+  if (d.imgClear) { delete state.images[d.imgClear]; saveLocal(); dropImage(d.imgClear); return showCard(d.imgClear, true); }
+  if (d.remove) {
+    state.owned = state.owned.filter(x => x !== d.remove);
+    state.custom = state.custom.filter(x => x.id !== d.remove);
+    if (state.images[d.remove]) { delete state.images[d.remove]; dropImage(d.remove); }
+    delete state.opts[d.remove];
+    save(); return closeSheet();
+  }
+});
+document.addEventListener('change', e => {
+  const id = e.target.dataset?.img;
+  if (id && e.target.files[0]) setImage(id, e.target.files[0]);
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') renderShops();
+  if (e.target.id === 'pickQ') { pickQuery = e.target.value; $('pickList').innerHTML = pickerRows(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.body.classList.contains('open')) closeSheet();
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-store]')) { e.preventDefault(); showStore(e.target.dataset.store); }
+});
+$('scrim').addEventListener('click', closeSheet);
+// 並べ替え。指の動きは押し始めたカードに届き続けるので、タッチはカード一覧の中だけで受ける
+const wallet = $('wallet');
+wallet.addEventListener('touchstart', dragStart, { passive: true });
+wallet.addEventListener('touchmove', dragMove, { passive: false });
+wallet.addEventListener('touchend', dragEnd);
+wallet.addEventListener('touchcancel', dragEnd);
+wallet.addEventListener('mousedown', dragStart);
+wallet.addEventListener('contextmenu', e => { if (e.target.closest('.stack')) e.preventDefault(); });
+document.addEventListener('mousemove', dragMove);
+document.addEventListener('mouseup', dragEnd);
+wallet.addEventListener('keydown', e => {   // キーボードでは Alt＋上下キーで並べ替える
+  const el = e.target.closest('.stack .card');
+  if (!el || !e.altKey || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
+  const i = state.owned.indexOf(el.dataset.card), j = i + (e.key === 'ArrowUp' ? -1 : 1);
+  if (i < 0 || j < 0 || j >= state.owned.length) return;
+  e.preventDefault();
+  [state.owned[i], state.owned[j]] = [state.owned[j], state.owned[i]];
+  save(); renderWallet();
+  document.querySelector(`.stack [data-card="${CSS.escape(el.dataset.card)}"]`)?.focus();
+});
+
+renderWallet(); renderShops();
+connect();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "カードナビ",
+  "short_name": "カードナビ",
+  "description": "手持ちのカードとお店を選ぶだけで、いちばん還元率が高い支払い方がわかります。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#040814",
+  "theme_color": "#040814",
+  "categories": ["finance", "shopping"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
